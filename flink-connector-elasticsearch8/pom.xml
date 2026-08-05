@@ -36,7 +36,7 @@ under the License.
 
 	<!-- Allow users to pass custom connector versions -->
 	<properties>
-		<elasticsearch.version>8.12.1</elasticsearch.version>
+		<elasticsearch.version>8.17.0</elasticsearch.version>
 		<surefire.module.config><!-- required by
 		ElasticsearchSinkBaseITCase -->--add-opens=java.base/java.util=ALL-UNNAMED</surefire.module.config>
 		<jackson.version>2.16.1</jackson.version>
