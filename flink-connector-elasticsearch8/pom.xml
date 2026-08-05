@@ -24,9 +24,9 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>com.hytera.flink</groupId>
 		<artifactId>flink-connector-elasticsearch-parent</artifactId>
-		<version>4.1-SNAPSHOT</version>
+		<version>4.1.0-hytera.1</version>
 	</parent>
 
 	<artifactId>flink-connector-elasticsearch8</artifactId>
@@ -36,7 +36,7 @@ under the License.
 
 	<!-- Allow users to pass custom connector versions -->
 	<properties>
-		<elasticsearch.version>8.12.1</elasticsearch.version>
+		<elasticsearch.version>8.17.0</elasticsearch.version>
 		<surefire.module.config><!-- required by
 		ElasticsearchSinkBaseITCase -->--add-opens=java.base/java.util=ALL-UNNAMED</surefire.module.config>
 		<jackson.version>2.16.1</jackson.version>
@@ -89,7 +89,7 @@ under the License.
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>com.hytera.flink</groupId>
 			<artifactId>flink-connector-elasticsearch-base</artifactId>
 			<version>${project.version}</version>
 			<exclusions>

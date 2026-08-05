@@ -24,9 +24,9 @@ under the License.
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.apache.flink</groupId>
+		<groupId>com.hytera.flink</groupId>
 		<artifactId>flink-connector-elasticsearch-parent</artifactId>
-		<version>4.1-SNAPSHOT</version>
+		<version>4.1.0-hytera.1</version>
 	</parent>
 
 	<artifactId>flink-sql-connector-elasticsearch6</artifactId>
@@ -40,7 +40,7 @@ under the License.
 
 	<dependencies>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>com.hytera.flink</groupId>
 			<artifactId>flink-connector-elasticsearch6</artifactId>
 			<version>${project.version}</version>
 		</dependency>
