@@ -47,6 +47,7 @@ under the License.
 		<module>flink-connector-elasticsearch6</module>
 		<module>flink-connector-elasticsearch7</module>
 		<module>flink-connector-elasticsearch8</module>
+		<module>flink-connector-elasticsearch9</module>
 		<module>flink-connector-elasticsearch-e2e-tests</module>
 	</modules>
 
@@ -399,6 +400,7 @@ under the License.
 				<module>flink-sql-connector-elasticsearch6</module>
 				<module>flink-sql-connector-elasticsearch7</module>
 				<module>flink-sql-connector-elasticsearch8</module>
+				<module>flink-sql-connector-elasticsearch9</module>
 			</modules>
 		</profile>
 	</profiles>
