@@ -114,6 +114,15 @@ under the License.
 		</dependency>
 
 		<!-- Tests -->
+		<!-- rest5-client does not pull commons-codec (es8 got it transitively via httpclient4);
+		     the ITCase/testcontainers stack needs it at test time. -->
+		<dependency>
+			<groupId>commons-codec</groupId>
+			<artifactId>commons-codec</artifactId>
+			<version>1.15</version>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>elasticsearch</artifactId>

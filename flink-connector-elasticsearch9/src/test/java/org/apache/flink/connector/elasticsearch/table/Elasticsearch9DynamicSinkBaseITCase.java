@@ -280,8 +280,8 @@ abstract class Elasticsearch9DynamicSinkBaseITCase {
     protected HttpHost getHost() {
         return secure
                 ? new HttpHost(
-                        ES_CONTAINER_SECURE.getHost(),
                         "https",
+                        ES_CONTAINER_SECURE.getHost(),
                         ES_CONTAINER_SECURE.getFirstMappedPort())
                 : new HttpHost(ES_CONTAINER.getHost(), ES_CONTAINER.getFirstMappedPort());
     }

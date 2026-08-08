@@ -182,9 +182,13 @@ public class NetworkConfig implements Serializable {
     private CredentialsStore getCredentials() {
         final CredentialsStore credentialsProvider = new BasicCredentialsProvider();
 
-        credentialsProvider.setCredentials(
-                new AuthScope((HttpHost) null),
-                new UsernamePasswordCredentials(username, password.toCharArray()));
+        // httpclient5 AuthScope rejects a null host (no AuthScope.ANY); register per configured
+        // host.
+        for (HttpHost host : hosts) {
+            credentialsProvider.setCredentials(
+                    new AuthScope(host),
+                    new UsernamePasswordCredentials(username, password.toCharArray()));
+        }
 
         return credentialsProvider;
     }

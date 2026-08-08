@@ -128,17 +128,15 @@ public class Elasticsearch9VectorSearchITCase {
     }
 
     private ElasticsearchClient getClient() {
+        HttpHost host =
+                new HttpHost("https", ES_CONTAINER.getHost(), ES_CONTAINER.getFirstMappedPort());
         final CredentialsStore credentialsProvider = new BasicCredentialsProvider();
         credentialsProvider.setCredentials(
-                new AuthScope((HttpHost) null),
+                new AuthScope(host),
                 new UsernamePasswordCredentials(
                         ES_CLUSTER_USERNAME, ES_CLUSTER_PASSWORD.toCharArray()));
         Rest5Client restClient =
-                Rest5Client.builder(
-                                new HttpHost(
-                                        ES_CONTAINER.getHost(),
-                                        "https",
-                                        ES_CONTAINER.getFirstMappedPort()))
+                Rest5Client.builder(host)
                         .setHttpClientConfigCallback(
                                 httpClientBuilder -> {
                                     httpClientBuilder.setDefaultCredentialsProvider(
