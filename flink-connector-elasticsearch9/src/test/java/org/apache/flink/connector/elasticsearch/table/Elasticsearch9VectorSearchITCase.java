@@ -91,7 +91,7 @@ public class Elasticsearch9VectorSearchITCase {
 
     private static final int PARALLELISM = 2;
 
-    public static final String ELASTICSEARCH_VERSION = "8.19.0";
+    public static final String ELASTICSEARCH_VERSION = "9.4.4";
     public static final DockerImageName ELASTICSEARCH_IMAGE =
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch")
                     .withTag(ELASTICSEARCH_VERSION);
@@ -252,7 +252,7 @@ public class Elasticsearch9VectorSearchITCase {
         assertThat(rows)
                 .isEqualTo(
                         Collections.singletonList(
-                                "+I[1, [11.11, 1.0], 1, ABCDE, true, 127, 257, 65535, 2003-10-20, 2012-12-12T12:12:12, 11.11, 12.22, [11.11, 11.12], [12.22, 12.22], [-2147483648, 2147483647], [-9223372036854775808, 9223372036854775807], 0.8836806]"));
+                                "+I[1, [11.11, 1.0], 1, ABCDE, true, 127, 257, 65535, 2003-10-20, 2012-12-12T12:12:12, 11.11, 12.22, [11.11, 11.12], [12.22, 12.22], [-2147483500, 2147483500], [-9223371500000000000, 9223371500000000000], 0.8836806]"));
     }
 
     @ParameterizedTest

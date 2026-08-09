@@ -84,7 +84,7 @@ abstract class Elasticsearch9DynamicSinkBaseITCase {
     private static final Logger LOG =
             LoggerFactory.getLogger(Elasticsearch9DynamicSinkBaseITCase.class);
 
-    public static final String ELASTICSEARCH_VERSION = "8.12.1";
+    public static final String ELASTICSEARCH_VERSION = "9.4.4";
     public static final DockerImageName ELASTICSEARCH_IMAGE =
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch")
                     .withTag(ELASTICSEARCH_VERSION);
