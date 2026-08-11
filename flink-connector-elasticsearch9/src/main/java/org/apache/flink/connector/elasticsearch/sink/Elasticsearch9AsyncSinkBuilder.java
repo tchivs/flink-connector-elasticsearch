@@ -92,8 +92,6 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
 
     private SerializableSupplier<SSLContext> sslContextSupplier;
 
-    private SerializableSupplier<HostnameVerifier> sslHostnameVerifier;
-
     /**
      * setHosts set the hosts where the Elasticsearch cluster is reachable.
      *
@@ -191,15 +189,23 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
     }
 
     /**
-     * Sets the supplier for getting an SSL {@link HostnameVerifier} instance.
+     * Not supported on the Elasticsearch 9 connector.
      *
-     * @param sslHostnameVerifierSupplier the serializable hostname verifier supplier function
+     * <p>The HttpComponents 5 async transport used by the ES 9.x Java client does not expose a
+     * builder-level hostname verifier; hostname verification is governed by the configured {@link
+     * SSLContext} (or {@link #setCertificateFingerprint(String)}).
+     *
+     * @param sslHostnameVerifierSupplier unused
      * @return this builder
+     * @throws UnsupportedOperationException always, so the limitation surfaces at build time
+     *     instead of silently degrading to default hostname verification.
      */
     public Elasticsearch9AsyncSinkBuilder<InputT> setSslHostnameVerifier(
             SerializableSupplier<HostnameVerifier> sslHostnameVerifierSupplier) {
-        this.sslHostnameVerifier = sslHostnameVerifierSupplier;
-        return this;
+        throw new UnsupportedOperationException(
+                "Elasticsearch 9 (HttpComponents 5 async transport) does not expose a builder-level "
+                        + "SSL HostnameVerifier; configure hostname verification via "
+                        + "setSslContextSupplier(...) or setCertificateFingerprint(...).");
     }
 
     /**
@@ -280,7 +286,9 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
                 connectionTimeout,
                 socketTimeout,
                 sslContextSupplier,
-                sslHostnameVerifier);
+                // HostnameVerifier is not supported by the ES 9.x (HttpComponents 5) transport;
+                // setSslHostnameVerifier throws UnsupportedOperationException, so always null here.
+                null);
     }
 
     /** A wrapper that evolves the Operation, since a BulkOperationVariant is not Serializable. */

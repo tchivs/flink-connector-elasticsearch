@@ -30,7 +30,7 @@ under the License.
 	</parent>
 
 	<artifactId>flink-sql-connector-elasticsearch9</artifactId>
-	<name>Flink : Connectors : SQL : Elasticsearch 8</name>
+	<name>Flink : Connectors : SQL : Elasticsearch 9</name>
 
 	<packaging>jar</packaging>
 
@@ -116,6 +116,12 @@ under the License.
 								<relocation>
 									<pattern>org.apache.http</pattern>
 									<shadedPattern>org.apache.flink.elasticsearch9.shaded.org.apache.http</shadedPattern>
+								</relocation>
+								<!-- httpclient5 (HttpComponents 5, org.apache.hc.*) is what the ES 9.x client uses;
+									 relocate it too or the uber jar leaks unshaded hc5 classes. -->
+								<relocation>
+									<pattern>org.apache.hc</pattern>
+									<shadedPattern>org.apache.flink.elasticsearch9.shaded.org.apache.hc</shadedPattern>
 								</relocation>
 								<relocation>
 									<pattern>org.apache.commons</pattern>

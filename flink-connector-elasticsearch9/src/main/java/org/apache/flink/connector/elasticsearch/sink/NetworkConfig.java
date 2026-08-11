@@ -111,20 +111,27 @@ public class NetworkConfig implements Serializable {
     }
 
     public ElasticsearchAsyncClient createEsClient() {
-        // the JavaTimeModule is added to provide support for java 8 Time classes.
+        return new ElasticsearchAsyncClient(
+                new Rest5ClientTransport(this.getRest5Client(), createJsonpMapper()));
+    }
+
+    public ElasticsearchClient createEsSyncClient() {
+        return new ElasticsearchClient(
+                new Rest5ClientTransport(this.getRest5Client(), createJsonpMapper()));
+    }
+
+    /**
+     * Shared JSON mapper for both transports. The JavaTimeModule is added to provide support for
+     * java 8 Time classes, with the same date/time formatters on the sync and async paths.
+     */
+    private static JacksonJsonpMapper createJsonpMapper() {
         JavaTimeModule javaTimeModule = new JavaTimeModule();
         javaTimeModule.addSerializer(
                 LocalDateTime.class, new LocalDateTimeSerializer(DATE_TIME_FORMATTER));
         javaTimeModule.addSerializer(LocalDate.class, new LocalDateSerializer(DATE_FORMATTER));
         javaTimeModule.addSerializer(LocalTime.class, new LocalTimeSerializer(TIME_FORMATTER));
         ObjectMapper mapper = JsonMapper.builder().addModule(javaTimeModule).build();
-        return new ElasticsearchAsyncClient(
-                new Rest5ClientTransport(this.getRest5Client(), new JacksonJsonpMapper(mapper)));
-    }
-
-    public ElasticsearchClient createEsSyncClient() {
-        return new ElasticsearchClient(
-                new Rest5ClientTransport(this.getRest5Client(), new JacksonJsonpMapper()));
+        return new JacksonJsonpMapper(mapper);
     }
 
     private Rest5Client getRest5Client() {
