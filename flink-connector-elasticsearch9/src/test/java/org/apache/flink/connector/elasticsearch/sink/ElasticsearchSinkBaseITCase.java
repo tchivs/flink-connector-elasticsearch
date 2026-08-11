@@ -212,7 +212,11 @@ public abstract class ElasticsearchSinkBaseITCase {
         container
                 .withEnv("logger.org.elasticsearch", "INFO")
                 .setWaitStrategy(
-                        new LogMessageWaitStrategy().withRegEx(".*\"message\":\"started.*"));
+                        new LogMessageWaitStrategy()
+                                .withRegEx(".*\"message\":\"started.*")
+                                // Align with the non-secure container (5 min): the 2g-heap ES
+                                // 9.4.4 container can take >60s to print "started" on slower CI.
+                                .withStartupTimeout(Duration.ofMinutes(5)));
 
         return container;
     }
