@@ -21,10 +21,14 @@
 
 package org.apache.flink.connector.elasticsearch.sink;
 
+import org.apache.flink.connector.base.sink.writer.BufferedRequestState;
+import org.apache.flink.connector.base.sink.writer.RequestEntryWrapper;
+
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperationVariant;
 import co.elastic.clients.elasticsearch.core.bulk.DeleteOperation;
 import co.elastic.clients.elasticsearch.core.bulk.IndexOperation;
 import co.elastic.clients.elasticsearch.core.bulk.UpdateOperation;
+import co.elastic.clients.json.JsonData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -39,6 +43,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -114,5 +120,62 @@ public class OperationSerializerTest {
         assertThat(actualState.getBulkOperationVariant())
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder().build())
                 .isEqualTo(expectedState.getBulkOperationVariant());
+    }
+
+    @Test
+    public void testCheckpointRestoreScriptedUpdateOperationWithParams() throws Exception {
+        Map<String, Object> document = Collections.singletonMap("updatedAt", "2026-08-28");
+        List<Map<String, Object>> mutations =
+                Collections.singletonList(Collections.singletonMap("partyId", "DSR-001"));
+        UpdateOperation<Object, Object> updateOperation =
+                UpdateOperation.of(
+                        b ->
+                                b.index("idx")
+                                        .id("id1")
+                                        .action(
+                                                a ->
+                                                        a.script(
+                                                                        s ->
+                                                                                s.lang("painless")
+                                                                                        .source(
+                                                                                                source ->
+                                                                                                        source
+                                                                                                                .scriptString(
+                                                                                                                        "ctx._source.putAll(params.doc)"))
+                                                                                        .params(
+                                                                                                "doc",
+                                                                                                JsonData
+                                                                                                        .of(
+                                                                                                                document))
+                                                                                        .params(
+                                                                                                "mutations",
+                                                                                                JsonData
+                                                                                                        .of(
+                                                                                                                mutations)))
+                                                                .scriptedUpsert(true)
+                                                                .upsert(Collections.emptyMap())));
+        Operation operation = new Operation(updateOperation);
+        long requestSize = getRequestSize(operation);
+        BufferedRequestState<Operation> checkpoint =
+                new BufferedRequestState<>(
+                        Collections.singletonList(
+                                new RequestEntryWrapper<>(operation, requestSize)));
+        Elasticsearch9AsyncSinkSerializer serializer = new Elasticsearch9AsyncSinkSerializer();
+
+        BufferedRequestState<Operation> restored =
+                serializer.deserialize(serializer.getVersion(), serializer.serialize(checkpoint));
+        UpdateOperation<?, ?> restoredUpdate =
+                (UpdateOperation<?, ?>)
+                        restored.getBufferedRequestEntries()
+                                .get(0)
+                                .getRequestEntry()
+                                .getBulkOperationVariant();
+
+        assertThat(restoredUpdate.action().script().source().scriptString())
+                .isEqualTo("ctx._source.putAll(params.doc)");
+        assertThat(restoredUpdate.action().script().params().get("doc").to(Map.class))
+                .isEqualTo(document);
+        assertThat(restoredUpdate.action().script().params().get("mutations").to(List.class))
+                .isEqualTo(mutations);
     }
 }

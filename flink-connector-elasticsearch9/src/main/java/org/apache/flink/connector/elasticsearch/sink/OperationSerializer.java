@@ -24,15 +24,22 @@ package org.apache.flink.connector.elasticsearch.sink;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.MapSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /** OperationSerializer is responsible for serialization and deserialization of an Operation. */
 public class OperationSerializer {
+    private static final Class<?> UNMODIFIABLE_MAP_CLASS =
+            Collections.unmodifiableMap(Collections.emptyMap()).getClass();
+
     private final Kryo kryo = new Kryo();
 
     public OperationSerializer() {
@@ -43,6 +50,7 @@ public class OperationSerializer {
         // Use TCCL so Kryo can resolve classes that live in the user-code
         // ClassLoader, not the system AppClassLoader.
         kryo.setClassLoader(Thread.currentThread().getContextClassLoader());
+        kryo.addDefaultSerializer(UNMODIFIABLE_MAP_CLASS, new MutableOnReadMapSerializer());
     }
 
     public void serialize(Operation request, DataOutputStream out) {
@@ -65,6 +73,21 @@ public class OperationSerializer {
             output.flush();
 
             return (int) output.total();
+        }
+    }
+
+    /**
+     * Elasticsearch freezes generated maps with {@link Collections#unmodifiableMap(Map)}. Kryo's
+     * default map reader instantiates that wrapper and then calls {@link Map#put(Object, Object)}.
+     * Using the same {@link MapSerializer} write format with a mutable read target also keeps
+     * existing version-1 checkpoint bytes compatible.
+     */
+    private static final class MutableOnReadMapSerializer
+            extends MapSerializer<Map<Object, Object>> {
+        @Override
+        protected Map<Object, Object> create(
+                Kryo kryo, Input input, Class<? extends Map<Object, Object>> type, int size) {
+            return new HashMap<>(size);
         }
     }
 }
