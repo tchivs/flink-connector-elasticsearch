@@ -32,7 +32,7 @@ class PackagingITCase {
     @Test
     void testPackaging() throws Exception {
         final Path jar =
-                ResourceTestUtils.getResource(".*/flink-sql-connector-elasticsearch8-[^/]*\\.jar");
+                ResourceTestUtils.getResource(".*/flink-sql-connector-elasticsearch9-[^/]*\\.jar");
 
         PackagingTestUtils.assertJarContainsOnlyFilesMatching(
                 jar,
@@ -40,7 +40,15 @@ class PackagingITCase {
                         "META-INF/",
                         "org/apache/flink/connector/base/",
                         "org/apache/flink/connector/elasticsearch/",
-                        "org/apache/flink/elasticsearch8/"));
+                        "org/apache/flink/elasticsearch9/",
+                        // Not relocated, although the shade configuration claims to relocate
+                        // everything it bundles: jackson 3 moved to the `tools.jackson` namespace
+                        // (the relocation only covers `com.fasterxml.jackson`) and httpclient5
+                        // brings the public-suffix list. Listed so the layout is asserted rather
+                        // than assumed; relocating them changes the artifact and needs its own
+                        // verification against a real cluster.
+                        "tools/jackson/",
+                        "org/publicsuffix/"));
         PackagingTestUtils.assertJarContainsServiceEntry(jar, Factory.class);
     }
 }
