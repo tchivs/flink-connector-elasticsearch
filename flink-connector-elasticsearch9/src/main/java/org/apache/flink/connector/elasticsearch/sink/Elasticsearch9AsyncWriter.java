@@ -36,6 +36,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchAsyncClient;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -164,22 +165,62 @@ public class Elasticsearch9AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
             List<Operation> requestEntries,
             ResultHandler<Operation> resultHandler,
             BulkResponse response) {
-        LOG.debug("The BulkRequest has failed partially. Response: {}", response);
-        ArrayList<Operation> failedItems = new ArrayList<>();
-        for (int i = 0; i < response.items().size(); i++) {
-            if (response.items().get(i).error() != null) {
-                failedItems.add(requestEntries.get(i));
-            }
+        long failedItemCount =
+                response.items().stream().filter(item -> item.error() != null).count();
+        numRecordsOutErrorsCounter.inc(failedItemCount);
+
+        final List<Operation> retryableItems;
+        try {
+            retryableItems = retryableEntriesOrThrow(requestEntries, response);
+        } catch (FlinkRuntimeException fatalError) {
+            LOG.warn(
+                    "Elasticsearch rejected a non-retryable bulk item: {}",
+                    fatalError.getMessage());
+            resultHandler.completeExceptionally(fatalError);
+            return;
         }
 
-        numRecordsOutErrorsCounter.inc(failedItems.size());
-        numRecordsSendPartialFailureCounter.inc(failedItems.size());
+        numRecordsSendPartialFailureCounter.inc(retryableItems.size());
         LOG.info(
-                "The BulkRequest with {} operation(s) has {} failure(s). It took {}ms",
+                "The BulkRequest with {} operation(s) has {} retryable failure(s). It took {}ms",
                 requestEntries.size(),
-                failedItems.size(),
+                retryableItems.size(),
                 response.took());
-        resultHandler.retryForEntries(failedItems);
+        if (retryableItems.isEmpty()) {
+            resultHandler.complete();
+        } else {
+            resultHandler.retryForEntries(retryableItems);
+        }
+    }
+
+    static List<Operation> retryableEntriesOrThrow(
+            List<Operation> requestEntries, BulkResponse response) {
+        if (requestEntries.size() != response.items().size()) {
+            throw new FlinkRuntimeException(
+                    "Elasticsearch bulk response item count does not match the request count");
+        }
+
+        ArrayList<Operation> retryableItems = new ArrayList<>();
+        for (int i = 0; i < response.items().size(); i++) {
+            BulkResponseItem item = response.items().get(i);
+            if (item.error() == null) {
+                continue;
+            }
+            if (isRetryableStatus(item.status())) {
+                retryableItems.add(requestEntries.get(i));
+                continue;
+            }
+            String errorType = item.error().type() == null ? "unknown" : item.error().type();
+            throw new FlinkRuntimeException(
+                    String.format(
+                            "status=%d, errorType=%s, index=%s",
+                            item.status(), errorType, item.index()));
+        }
+        return retryableItems;
+    }
+
+    static boolean isRetryableStatus(int status) {
+        return status == 408 || status == 429 || (status >= 500 && status < 600);
     }
 
     private void handleSuccessfulRequest(
