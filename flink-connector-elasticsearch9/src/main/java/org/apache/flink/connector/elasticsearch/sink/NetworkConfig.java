@@ -80,6 +80,7 @@ public class NetworkConfig implements Serializable {
     @Nullable Integer socketTimeout;
     @Nullable private final SerializableSupplier<SSLContext> sslContextSupplier;
     @Nullable private final SerializableSupplier<HostnameVerifier> sslHostnameVerifier;
+    @Nullable private final HttpHost httpProxy;
     private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DATE_FORMATTER =
@@ -97,6 +98,32 @@ public class NetworkConfig implements Serializable {
             @Nullable Integer socketTimeout,
             @Nullable SerializableSupplier<SSLContext> sslContextSupplier,
             @Nullable SerializableSupplier<HostnameVerifier> sslHostnameVerifier) {
+        this(
+                hosts,
+                username,
+                password,
+                headers,
+                connectionPathPrefix,
+                connectionRequestTimeout,
+                connectionTimeout,
+                socketTimeout,
+                sslContextSupplier,
+                sslHostnameVerifier,
+                null);
+    }
+
+    public NetworkConfig(
+            List<HttpHost> hosts,
+            String username,
+            String password,
+            List<Header> headers,
+            @Nullable String connectionPathPrefix,
+            @Nullable Integer connectionRequestTimeout,
+            @Nullable Integer connectionTimeout,
+            @Nullable Integer socketTimeout,
+            @Nullable SerializableSupplier<SSLContext> sslContextSupplier,
+            @Nullable SerializableSupplier<HostnameVerifier> sslHostnameVerifier,
+            @Nullable HttpHost httpProxy) {
         checkState(!hosts.isEmpty(), "Hosts must not be empty");
         this.hosts = hosts;
         this.username = username;
@@ -108,6 +135,7 @@ public class NetworkConfig implements Serializable {
         this.connectionPathPrefix = connectionPathPrefix;
         this.sslContextSupplier = sslContextSupplier;
         this.sslHostnameVerifier = sslHostnameVerifier;
+        this.httpProxy = httpProxy;
     }
 
     public ElasticsearchAsyncClient createEsClient() {
@@ -136,6 +164,10 @@ public class NetworkConfig implements Serializable {
 
     private Rest5Client getRest5Client() {
         Rest5ClientBuilder rest5ClientBuilder = Rest5Client.builder(hosts.toArray(new HttpHost[0]));
+
+        if (httpProxy != null) {
+            rest5ClientBuilder.setProxy(httpProxy);
+        }
 
         if (username != null && password != null) {
             rest5ClientBuilder.setHttpClientConfigCallback(

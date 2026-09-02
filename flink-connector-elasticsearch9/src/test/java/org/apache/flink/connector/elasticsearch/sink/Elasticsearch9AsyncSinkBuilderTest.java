@@ -21,14 +21,74 @@
 
 package org.apache.flink.connector.elasticsearch.sink;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.bulk.DeleteOperation;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import org.apache.hc.core5.http.HttpHost;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 /** Tests for {@link Elasticsearch9AsyncSinkBuilder}. */
 public class Elasticsearch9AsyncSinkBuilderTest {
+
+    private HttpServer proxyServer;
+
+    @AfterEach
+    void stopProxyServer() {
+        if (proxyServer != null) {
+            proxyServer.stop(0);
+        }
+    }
+
+    @Test
+    void testRoutesRequestsThroughConfiguredHttpProxy() throws Exception {
+        AtomicReference<String> method = new AtomicReference<>();
+        AtomicReference<String> host = new AtomicReference<>();
+        proxyServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        proxyServer.createContext(
+                "/",
+                exchange -> {
+                    try {
+                        method.set(exchange.getRequestMethod());
+                        host.set(exchange.getRequestHeaders().getFirst("Host"));
+                        respondSuccess(exchange);
+                    } finally {
+                        exchange.close();
+                    }
+                });
+        proxyServer.start();
+
+        HttpHost proxy = new HttpHost("http", "127.0.0.1", proxyServer.getAddress().getPort());
+        NetworkConfig networkConfig =
+                Elasticsearch9AsyncSinkBuilder.<String>builder()
+                        .setHosts(new HttpHost("http", "127.0.0.1", 1))
+                        .setHttpProxy(proxy)
+                        .buildNetworkConfig();
+
+        try (ElasticsearchClient client = networkConfig.createEsSyncClient()) {
+            assertThat(client.indices().exists(request -> request.index("proxy-check")).value())
+                    .isTrue();
+        }
+
+        assertThat(method.get()).isEqualTo("HEAD");
+        assertThat(host.get()).isEqualTo("127.0.0.1:1");
+    }
+
+    @Test
+    void testThrowExceptionIfHttpProxyIsNull() {
+        assertThatThrownBy(
+                        () -> Elasticsearch9AsyncSinkBuilder.<String>builder().setHttpProxy(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
     @Test
     void testThrowExceptionIfElementConverterIsNotProvided() {
         assertThatThrownBy(
@@ -108,5 +168,10 @@ public class Elasticsearch9AsyncSinkBuilderTest {
                                         .setCertificateFingerprint(null)
                                         .build())
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    private static void respondSuccess(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().add("X-Elastic-Product", "Elasticsearch");
+        exchange.sendResponseHeaders(200, -1);
     }
 }

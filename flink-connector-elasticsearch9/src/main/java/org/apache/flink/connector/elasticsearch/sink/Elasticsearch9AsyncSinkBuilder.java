@@ -90,6 +90,8 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
 
     private Integer socketTimeout;
 
+    private HttpHost httpProxy;
+
     private SerializableSupplier<SSLContext> sslContextSupplier;
 
     /**
@@ -124,6 +126,20 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
 
     public Elasticsearch9AsyncSinkBuilder<InputT> setSocketTimeout(Integer socketTimeout) {
         this.socketTimeout = socketTimeout;
+        return this;
+    }
+
+    /**
+     * Sets the HTTP proxy used for requests to Elasticsearch.
+     *
+     * <p>Proxy authentication is not supported. The proxy endpoint contains only the scheme, host,
+     * and port.
+     *
+     * @param httpProxy the HTTP proxy endpoint
+     * @return {@code Elasticsearch9AsyncSinkBuilder}
+     */
+    public Elasticsearch9AsyncSinkBuilder<InputT> setHttpProxy(HttpHost httpProxy) {
+        this.httpProxy = checkNotNull(httpProxy, "HTTP proxy must not be null");
         return this;
     }
 
@@ -274,7 +290,7 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
         return converter != null ? new OperationConverter<>(converter) : null;
     }
 
-    private NetworkConfig buildNetworkConfig() {
+    NetworkConfig buildNetworkConfig() {
         checkArgument(!hosts.isEmpty(), "Hosts cannot be empty.");
         return new NetworkConfig(
                 hosts,
@@ -288,7 +304,8 @@ public class Elasticsearch9AsyncSinkBuilder<InputT>
                 sslContextSupplier,
                 // HostnameVerifier is not supported by the ES 9.x (HttpComponents 5) transport;
                 // setSslHostnameVerifier throws UnsupportedOperationException, so always null here.
-                null);
+                null,
+                httpProxy);
     }
 
     /** A wrapper that evolves the Operation, since a BulkOperationVariant is not Serializable. */
