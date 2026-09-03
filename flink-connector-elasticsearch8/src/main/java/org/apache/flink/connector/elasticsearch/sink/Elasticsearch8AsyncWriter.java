@@ -39,6 +39,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
 import java.util.ArrayList;
@@ -200,11 +201,24 @@ public class Elasticsearch8AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
         return operationSerializer.size(requestEntry);
     }
 
+    /**
+     * Releases the Elasticsearch transport and its HTTP client.
+     *
+     * <p>Must call {@link ElasticsearchAsyncClient#close()}, never {@code shutdown()}: the latter is
+     * the accessor for the Elasticsearch <em>Shutdown API</em> namespace (node decommission) and
+     * releases nothing, leaking this writer's whole reactor pool and its Netty direct buffers for
+     * the lifetime of the TaskManager JVM. See the same fix in {@code Elasticsearch9AsyncWriter}.
+     */
     @Override
     public void close() {
-        if (!close) {
-            close = true;
-            esClient.shutdown();
+        if (close) {
+            return;
+        }
+        close = true;
+        try {
+            esClient.close();
+        } catch (IOException failure) {
+            throw new FlinkRuntimeException("Could not close the Elasticsearch client", failure);
         }
     }
 }

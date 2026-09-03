@@ -37,6 +37,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -199,6 +201,66 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
         assertThat(context.metricGroup().getNumRecordsOutErrorsCounter().getCount()).isEqualTo(1);
         assertIdsAreWritten(index, new String[] {"test-2"});
         assertIdsAreNotWritten(index, new String[] {"test-1"});
+    }
+
+    /**
+     * {@code close()} must release the client's reactor pool. Each writer creates its own
+     * {@code ElasticsearchAsyncClient}, so leaking it accumulates a whole reactor pool (33
+     * {@code elasticsearch-rest-client-N-thread-M} threads) plus its Netty direct buffers per
+     * writer, for the lifetime of the TaskManager JVM. That is not merely a thread leak: exhausted
+     * direct memory makes unrelated Netty clients in the same JVM fail to allocate send buffers,
+     * which was observed as a RocketMQ source logging {@code RemotingSendRequestException} forever
+     * while silently consuming nothing.
+     *
+     * <p>Counts pools, not threads: this test class keeps its own assertion {@link Rest5Client},
+     * whose threads share the {@code elasticsearch-rest-client} prefix and start lazily, so a raw
+     * thread count drifts for reasons unrelated to the writer. Each client gets its own numbered
+     * pool, so a pool surviving {@code close()} is exactly one leaked client.
+     *
+     * <p>Fails when {@code close()} calls {@code esClient.shutdown()} — the accessor for the
+     * Elasticsearch Shutdown API namespace, which releases nothing.
+     */
+    @TestTemplate
+    @Timeout(120)
+    public void testCloseReleasesTheClientReactorThreads() throws Exception {
+        String index = "test-close-releases-reactor-threads";
+        Set<String> poolsBefore = restClientThreadPools();
+
+        for (int round = 0; round < 3; round++) {
+            try (Elasticsearch9AsyncWriter<DummyData> writer = createWriter(index, 1)) {
+                writer.write(new DummyData("close-" + round, "close-" + round), null);
+                writer.flush(true);
+            }
+        }
+
+        long deadline = System.currentTimeMillis() + 30_000;
+        Set<String> leaked = leakedPools(poolsBefore);
+        while (!leaked.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(250);
+            leaked = leakedPools(poolsBefore);
+        }
+        assertThat(leaked)
+                .as("close() must release every reactor pool it created (before=%s)", poolsBefore)
+                .isEmpty();
+    }
+
+    private static Set<String> leakedPools(Set<String> poolsBefore) {
+        Set<String> leaked = new TreeSet<>(restClientThreadPools());
+        leaked.removeAll(poolsBefore);
+        return leaked;
+    }
+
+    /** Distinct {@code elasticsearch-rest-client-N} pool names currently alive; one per client. */
+    private static Set<String> restClientThreadPools() {
+        Set<String> pools = new TreeSet<>();
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            String name = thread.getName();
+            int threadSuffix = name.lastIndexOf("-thread-");
+            if (name.startsWith("elasticsearch-rest-client") && threadSuffix > 0) {
+                pools.add(name.substring(0, threadSuffix));
+            }
+        }
+        return pools;
     }
 
     private Elasticsearch9AsyncWriter<DummyData> createWriter(String index, int maxBatchSize)

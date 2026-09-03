@@ -40,6 +40,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
 import java.util.ArrayList;
@@ -241,11 +242,29 @@ public class Elasticsearch9AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
         return operationSerializer.size(requestEntry);
     }
 
+    /**
+     * Releases the Elasticsearch transport and its HTTP client.
+     *
+     * <p>This must call {@link ElasticsearchAsyncClient#close()}, never {@code shutdown()}: the
+     * latter is the accessor for the Elasticsearch <em>Shutdown API</em> namespace (node
+     * decommission) and releases nothing. Calling it instead of {@code close()} leaks the whole
+     * reactor pool — roughly 33 {@code elasticsearch-rest-client} threads and their Netty direct
+     * buffers per writer — for the lifetime of the TaskManager JVM, because {@code AsyncSinkWriter}
+     * creates one client per writer instance. Once direct memory is exhausted, unrelated Netty
+     * clients in the same JVM start failing to allocate send buffers; a RocketMQ source in the same
+     * TaskManager then logs {@code RemotingSendRequestException} forever and silently stops
+     * consuming.
+     */
     @Override
     public void close() {
-        if (!close) {
-            close = true;
-            esClient.shutdown();
+        if (close) {
+            return;
+        }
+        close = true;
+        try {
+            esClient.close();
+        } catch (IOException failure) {
+            throw new FlinkRuntimeException("Could not close the Elasticsearch client", failure);
         }
     }
 }
