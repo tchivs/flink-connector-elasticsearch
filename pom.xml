@@ -29,7 +29,7 @@ under the License.
 
 	<groupId>com.hytera.flink</groupId>
 	<artifactId>flink-connector-elasticsearch-parent</artifactId>
-	<version>4.1.0-hytera.2</version>
+	<version>4.1.0-hytera.3</version>
 	<name>Flink : Connectors : Elasticsearch : Parent</name>
 	<packaging>pom</packaging>
 	<inceptionYear>2022</inceptionYear>
