@@ -39,6 +39,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
@@ -59,7 +60,7 @@ public class Elasticsearch8AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
 
     private final ElasticsearchAsyncClient esClient;
 
-    private boolean close = false;
+    private final ClientCloser clientCloser;
 
     private final Counter numRecordsOutErrorsCounter;
 
@@ -110,6 +111,7 @@ public class Elasticsearch8AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
                 state);
 
         this.esClient = networkConfig.createEsClient();
+        this.clientCloser = new ClientCloser(esClient);
         final SinkWriterMetricGroup metricGroup = context.metricGroup();
         checkNotNull(metricGroup);
 
@@ -204,21 +206,35 @@ public class Elasticsearch8AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
     /**
      * Releases the Elasticsearch transport and its HTTP client.
      *
-     * <p>Must call {@link ElasticsearchAsyncClient#close()}, never {@code shutdown()}: the latter is
-     * the accessor for the Elasticsearch <em>Shutdown API</em> namespace (node decommission) and
+     * <p>Must call {@link ElasticsearchAsyncClient#close()}, never {@code shutdown()}: the latter
+     * is the accessor for the Elasticsearch <em>Shutdown API</em> namespace (node decommission) and
      * releases nothing, leaking this writer's whole reactor pool and its Netty direct buffers for
      * the lifetime of the TaskManager JVM. See the same fix in {@code Elasticsearch9AsyncWriter}.
      */
     @Override
     public void close() {
-        if (close) {
-            return;
+        clientCloser.close();
+    }
+
+    static final class ClientCloser {
+        private final Closeable client;
+        private boolean closed;
+
+        ClientCloser(Closeable client) {
+            this.client = checkNotNull(client);
         }
-        close = true;
-        try {
-            esClient.close();
-        } catch (IOException failure) {
-            throw new FlinkRuntimeException("Could not close the Elasticsearch client", failure);
+
+        void close() {
+            if (closed) {
+                return;
+            }
+            try {
+                client.close();
+                closed = true;
+            } catch (IOException failure) {
+                throw new FlinkRuntimeException(
+                        "Could not close the Elasticsearch client", failure);
+            }
         }
     }
 }

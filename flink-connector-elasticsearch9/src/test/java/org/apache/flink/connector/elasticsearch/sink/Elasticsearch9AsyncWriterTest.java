@@ -31,14 +31,37 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tests the Elasticsearch bulk-item failure classification. */
 public class Elasticsearch9AsyncWriterTest {
+
+    @Test
+    public void testCloseCanBeRetriedAfterClientCloseFailure() {
+        AtomicInteger closeAttempts = new AtomicInteger();
+        Elasticsearch9AsyncWriter.ClientCloser closer =
+                new Elasticsearch9AsyncWriter.ClientCloser(
+                        () -> {
+                            if (closeAttempts.incrementAndGet() == 1) {
+                                throw new IOException("first close failed");
+                            }
+                        });
+
+        assertThatThrownBy(closer::close)
+                .isInstanceOf(FlinkRuntimeException.class)
+                .hasMessage("Could not close the Elasticsearch client")
+                .hasCauseInstanceOf(IOException.class);
+
+        closer.close();
+        closer.close();
+        assertThat(closeAttempts).hasValue(2);
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {408, 429, 500, 502, 503, 504, 599})

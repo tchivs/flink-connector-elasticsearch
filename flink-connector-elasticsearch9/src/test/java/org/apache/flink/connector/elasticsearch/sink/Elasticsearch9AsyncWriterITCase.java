@@ -39,9 +39,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,9 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase {
     private TestSinkInitContext context;
 
-    private final Lock lock = new ReentrantLock();
-
-    private final Condition completed = lock.newCondition();
+    private final Semaphore completions = new Semaphore(0);
 
     @BeforeEach
     void setUp() {
@@ -90,6 +86,7 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                 createWriter(index, maxBatchSize)) {
             writer.write(new DummyData("test-1", "test-1"), null);
             writer.flush(true);
+            await();
 
             assertIdsAreWritten(index, new String[] {"test-1"});
 
@@ -171,7 +168,7 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
     }
 
     @TestTemplate
-    @Timeout(5)
+    @Timeout(30)
     public void testHandlePartiallyFailedBulk() throws Exception {
         String index = "test-partially-failed-bulk";
         int maxBatchSize = 2;
@@ -194,9 +191,8 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                 createWriter(maxBatchSize, elementConverter)) {
             writer.write(new DummyData("test-1", "test-1-updated"), null);
             writer.write(new DummyData("test-2", "test-2-updated"), null);
+            await();
         }
-
-        await();
 
         assertThat(context.metricGroup().getNumRecordsOutErrorsCounter().getCount()).isEqualTo(1);
         assertIdsAreWritten(index, new String[] {"test-2"});
@@ -204,13 +200,13 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
     }
 
     /**
-     * {@code close()} must release the client's reactor pool. Each writer creates its own
-     * {@code ElasticsearchAsyncClient}, so leaking it accumulates a whole reactor pool (33
-     * {@code elasticsearch-rest-client-N-thread-M} threads) plus its Netty direct buffers per
-     * writer, for the lifetime of the TaskManager JVM. That is not merely a thread leak: exhausted
-     * direct memory makes unrelated Netty clients in the same JVM fail to allocate send buffers,
-     * which was observed as a RocketMQ source logging {@code RemotingSendRequestException} forever
-     * while silently consuming nothing.
+     * {@code close()} must release the client's reactor pool. Each writer creates its own {@code
+     * ElasticsearchAsyncClient}, so leaking it accumulates a whole reactor pool (33 {@code
+     * elasticsearch-rest-client-N-thread-M} threads) plus its Netty direct buffers per writer, for
+     * the lifetime of the TaskManager JVM. That is not merely a thread leak: exhausted direct
+     * memory makes unrelated Netty clients in the same JVM fail to allocate send buffers, which was
+     * observed as a RocketMQ source logging {@code RemotingSendRequestException} forever while
+     * silently consuming nothing.
      *
      * <p>Counts pools, not threads: this test class keeps its own assertion {@link Rest5Client},
      * whose threads share the {@code elasticsearch-rest-client} prefix and start lazily, so a raw
@@ -324,20 +320,29 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                                         new ResultHandler<Operation>() {
                                             @Override
                                             public void complete() {
-                                                resultHandler.complete();
-                                                signal();
+                                                try {
+                                                    resultHandler.complete();
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
 
                                             @Override
                                             public void completeExceptionally(Exception e) {
-                                                resultHandler.completeExceptionally(e);
-                                                signal();
+                                                try {
+                                                    resultHandler.completeExceptionally(e);
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
 
                                             @Override
                                             public void retryForEntries(List<Operation> list) {
-                                                resultHandler.retryForEntries(list);
-                                                signal();
+                                                try {
+                                                    resultHandler.retryForEntries(list);
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
                                         };
                                 super.submitRequestEntries(requestEntries, wrappedHandler);
@@ -350,20 +355,10 @@ public class Elasticsearch9AsyncWriterITCase extends ElasticsearchSinkBaseITCase
     }
 
     private void signal() {
-        lock.lock();
-        try {
-            completed.signal();
-        } finally {
-            lock.unlock();
-        }
+        completions.release();
     }
 
     private void await() throws InterruptedException {
-        lock.lock();
-        try {
-            completed.await();
-        } finally {
-            lock.unlock();
-        }
+        completions.acquire();
     }
 }

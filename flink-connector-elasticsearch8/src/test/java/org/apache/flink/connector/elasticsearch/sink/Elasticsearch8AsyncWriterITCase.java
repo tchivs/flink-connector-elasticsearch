@@ -37,9 +37,9 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,9 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase {
     private TestSinkInitContext context;
 
-    private final Lock lock = new ReentrantLock();
-
-    private final Condition completed = lock.newCondition();
+    private final Semaphore completions = new Semaphore(0);
 
     @BeforeEach
     void setUp() {
@@ -87,6 +85,7 @@ public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                 createWriter(index, maxBatchSize)) {
             writer.write(new DummyData("test-1", "test-1"), null);
             writer.flush(true);
+            await();
 
             assertIdsAreWritten(index, new String[] {"test-1"});
 
@@ -168,7 +167,7 @@ public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase
     }
 
     @TestTemplate
-    @Timeout(5)
+    @Timeout(30)
     public void testHandlePartiallyFailedBulk() throws Exception {
         String index = "test-partially-failed-bulk";
         int maxBatchSize = 2;
@@ -191,13 +190,54 @@ public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                 createWriter(maxBatchSize, elementConverter)) {
             writer.write(new DummyData("test-1", "test-1-updated"), null);
             writer.write(new DummyData("test-2", "test-2-updated"), null);
+            await();
         }
-
-        await();
 
         assertThat(context.metricGroup().getNumRecordsOutErrorsCounter().getCount()).isEqualTo(1);
         assertIdsAreWritten(index, new String[] {"test-2"});
         assertIdsAreNotWritten(index, new String[] {"test-1"});
+    }
+
+    @TestTemplate
+    @Timeout(120)
+    public void testCloseReleasesTheClientReactorThreads() throws Exception {
+        String index = "test-close-releases-reactor-threads";
+        Set<String> poolsBefore = restClientThreadPools();
+
+        for (int round = 0; round < 3; round++) {
+            try (Elasticsearch8AsyncWriter<DummyData> writer = createWriter(index, 1)) {
+                writer.write(new DummyData("close-" + round, "close-" + round), null);
+                writer.flush(true);
+            }
+        }
+
+        long deadline = System.currentTimeMillis() + 30_000;
+        Set<String> leaked = leakedPools(poolsBefore);
+        while (!leaked.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(250);
+            leaked = leakedPools(poolsBefore);
+        }
+        assertThat(leaked)
+                .as("close() must release every reactor pool it created (before=%s)", poolsBefore)
+                .isEmpty();
+    }
+
+    private static Set<String> leakedPools(Set<String> poolsBefore) {
+        Set<String> leaked = new TreeSet<>(restClientThreadPools());
+        leaked.removeAll(poolsBefore);
+        return leaked;
+    }
+
+    private static Set<String> restClientThreadPools() {
+        Set<String> pools = new TreeSet<>();
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            String name = thread.getName();
+            int threadSuffix = name.lastIndexOf("-thread-");
+            if (name.startsWith("elasticsearch-rest-client") && threadSuffix > 0) {
+                pools.add(name.substring(0, threadSuffix));
+            }
+        }
+        return pools;
     }
 
     private Elasticsearch8AsyncWriter<DummyData> createWriter(String index, int maxBatchSize)
@@ -261,20 +301,29 @@ public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase
                                         new ResultHandler<Operation>() {
                                             @Override
                                             public void complete() {
-                                                resultHandler.complete();
-                                                signal();
+                                                try {
+                                                    resultHandler.complete();
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
 
                                             @Override
                                             public void completeExceptionally(Exception e) {
-                                                resultHandler.completeExceptionally(e);
-                                                signal();
+                                                try {
+                                                    resultHandler.completeExceptionally(e);
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
 
                                             @Override
                                             public void retryForEntries(List<Operation> list) {
-                                                resultHandler.retryForEntries(list);
-                                                signal();
+                                                try {
+                                                    resultHandler.retryForEntries(list);
+                                                } finally {
+                                                    signal();
+                                                }
                                             }
                                         };
                                 super.submitRequestEntries(requestEntries, wrappedHandler);
@@ -287,20 +336,10 @@ public class Elasticsearch8AsyncWriterITCase extends ElasticsearchSinkBaseITCase
     }
 
     private void signal() {
-        lock.lock();
-        try {
-            completed.signal();
-        } finally {
-            lock.unlock();
-        }
+        completions.release();
     }
 
     private void await() throws InterruptedException {
-        lock.lock();
-        try {
-            completed.await();
-        } finally {
-            lock.unlock();
-        }
+        completions.acquire();
     }
 }

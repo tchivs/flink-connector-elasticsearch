@@ -40,6 +40,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
@@ -60,7 +61,7 @@ public class Elasticsearch9AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
 
     private final ElasticsearchAsyncClient esClient;
 
-    private boolean close = false;
+    private final ClientCloser clientCloser;
 
     private final Counter numRecordsOutErrorsCounter;
 
@@ -111,6 +112,7 @@ public class Elasticsearch9AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
                 state);
 
         this.esClient = networkConfig.createEsClient();
+        this.clientCloser = new ClientCloser(esClient);
         final SinkWriterMetricGroup metricGroup = context.metricGroup();
         checkNotNull(metricGroup);
 
@@ -257,14 +259,28 @@ public class Elasticsearch9AsyncWriter<InputT> extends AsyncSinkWriter<InputT, O
      */
     @Override
     public void close() {
-        if (close) {
-            return;
+        clientCloser.close();
+    }
+
+    static final class ClientCloser {
+        private final Closeable client;
+        private boolean closed;
+
+        ClientCloser(Closeable client) {
+            this.client = checkNotNull(client);
         }
-        close = true;
-        try {
-            esClient.close();
-        } catch (IOException failure) {
-            throw new FlinkRuntimeException("Could not close the Elasticsearch client", failure);
+
+        void close() {
+            if (closed) {
+                return;
+            }
+            try {
+                client.close();
+                closed = true;
+            } catch (IOException failure) {
+                throw new FlinkRuntimeException(
+                        "Could not close the Elasticsearch client", failure);
+            }
         }
     }
 }
