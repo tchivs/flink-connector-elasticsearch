@@ -60,7 +60,7 @@ under the License.
 			</exclusions>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.flink</groupId>
+			<groupId>com.hytera.flink</groupId>
 			<artifactId>flink-connector-elasticsearch7</artifactId>
 			<version>${project.version}</version>
 		</dependency>
@@ -135,7 +135,7 @@ under the License.
 				<configuration>
 					<artifactItems>
 						<artifactItem>
-							<groupId>org.apache.flink</groupId>
+							<groupId>com.hytera.flink</groupId>
 							<artifactId>flink-connector-elasticsearch-e2e-tests-common</artifactId>
 							<version>${project.version}</version>
 							<destFileName>flink-connector-elasticsearch-test-utils.jar</destFileName>
