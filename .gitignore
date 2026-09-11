@@ -12,6 +12,7 @@ filter.properties
 logs.zip
 .mvn/wrapper/*.jar
 target
+**/dependency-reduced-pom.xml
 tmp
 *.class
 *.iml
