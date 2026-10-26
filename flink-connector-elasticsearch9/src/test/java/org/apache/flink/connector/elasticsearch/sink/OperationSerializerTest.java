@@ -37,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -70,6 +71,35 @@ public class OperationSerializerTest {
         assertThat(actualState.getBulkOperationVariant())
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder().build())
                 .isEqualTo(expectedState.getBulkOperationVariant());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 4095, 4096, 4097, 65536, 1048576})
+    public void testSizeMatchesBytesAcrossRepeatedOperations(int payloadLength) {
+        OperationSerializer serializer = new OperationSerializer();
+        Object document =
+                Collections.unmodifiableMap(
+                        Collections.singletonMap("payload", "x".repeat(payloadLength)));
+        Operation[] requests = {
+            new Operation(IndexOperation.of(b -> b.index("idx").id("index").document(document))),
+            new Operation(DeleteOperation.of(b -> b.index("idx").id("delete"))),
+            new Operation(
+                    UpdateOperation.of(
+                            b -> b.index("idx").id("update").action(a -> a.doc(document))))
+        };
+        for (int repeat = 0; repeat < 3; repeat++) {
+            for (Operation request : requests) {
+                ByteArrayOutputStream expected = new ByteArrayOutputStream();
+                new OperationSerializer().serialize(request, new DataOutputStream(expected));
+
+                assertThat(serializer.size(request)).isEqualTo(expected.size());
+                assertThat(serializer.size(request)).isEqualTo(expected.size());
+
+                ByteArrayOutputStream actual = new ByteArrayOutputStream();
+                serializer.serialize(request, new DataOutputStream(actual));
+                assertThat(actual.toByteArray()).isEqualTo(expected.toByteArray());
+            }
+        }
     }
 
     private static Stream<Arguments> operations() {
@@ -155,6 +185,11 @@ public class OperationSerializerTest {
                                                                 .scriptedUpsert(true)
                                                                 .upsert(Collections.emptyMap())));
         Operation operation = new Operation(updateOperation);
+        ByteArrayOutputStream operationBytes = new ByteArrayOutputStream();
+        OperationSerializer operationSerializer = new OperationSerializer();
+        operationSerializer.serialize(operation, new DataOutputStream(operationBytes));
+        assertThat(operationSerializer.size(operation)).isEqualTo(operationBytes.size());
+        assertThat(operationSerializer.size(operation)).isEqualTo(operationBytes.size());
         long requestSize = getRequestSize(operation);
         BufferedRequestState<Operation> checkpoint =
                 new BufferedRequestState<>(

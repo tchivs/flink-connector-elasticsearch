@@ -28,9 +28,9 @@ import com.esotericsoftware.kryo.serializers.MapSerializer;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.OutputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -67,8 +67,7 @@ public class OperationSerializer {
     }
 
     public int size(Operation operation) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        try (Output output = new Output(byteArrayOutputStream)) {
+        try (Output output = new Output(OutputStream.nullOutputStream())) {
             kryo.writeObject(output, operation);
             output.flush();
 

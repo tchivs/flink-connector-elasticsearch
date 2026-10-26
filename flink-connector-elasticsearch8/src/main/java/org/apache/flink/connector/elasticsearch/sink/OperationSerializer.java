@@ -27,9 +27,9 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.OutputStream;
 
 /** OperationSerializer is responsible for serialization and deserialization of an Operation. */
 public class OperationSerializer {
@@ -59,8 +59,7 @@ public class OperationSerializer {
     }
 
     public int size(Operation operation) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        try (Output output = new Output(byteArrayOutputStream)) {
+        try (Output output = new Output(OutputStream.nullOutputStream())) {
             kryo.writeObject(output, operation);
             output.flush();
 
