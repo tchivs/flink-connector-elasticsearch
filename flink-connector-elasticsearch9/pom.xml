@@ -26,7 +26,7 @@ under the License.
 	<parent>
 		<groupId>com.hytera.flink</groupId>
 		<artifactId>flink-connector-elasticsearch-parent</artifactId>
-		<version>4.1.0-hytera.3</version>
+		<version>4.1.0-hytera.4</version>
 	</parent>
 
 	<artifactId>flink-connector-elasticsearch9</artifactId>
@@ -38,6 +38,8 @@ under the License.
 	<properties>
 		<maven.compiler.release>17</maven.compiler.release>
 		<elasticsearch.version>9.4.4</elasticsearch.version>
+		<!-- Sink IT forks each start two 2 GiB nodes; avoid concurrent cold starts. -->
+		<flink.forkCountITCase>1</flink.forkCountITCase>
 		<surefire.module.config><!-- required by
 		ElasticsearchSinkBaseITCase -->--add-opens=java.base/java.util=ALL-UNNAMED</surefire.module.config>
 		<jackson.version>2.16.1</jackson.version>

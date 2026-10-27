@@ -256,7 +256,10 @@ abstract class Elasticsearch9DynamicSinkBaseITCase {
         container
                 .withEnv("logger.org.elasticsearch", "INFO")
                 .setWaitStrategy(
-                        new LogMessageWaitStrategy().withRegEx(".*\"message\":\"started.*"));
+                        new LogMessageWaitStrategy()
+                                .withRegEx(".*\"message\":\"started.*")
+                                // Match the plain node and the async writer's TLS startup budget.
+                                .withStartupTimeout(Duration.ofMinutes(5)));
 
         return container;
     }
